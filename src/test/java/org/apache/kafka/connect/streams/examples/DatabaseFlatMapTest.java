@@ -28,11 +28,13 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class DatabaseFlatMapTest {
     @ClassRule
     public static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(1);
     public static EmbeddedDerby DB;
+    public static AtomicInteger COUNTER = new AtomicInteger();
 
     private static final String INPUT_TOPIC = "WORDCOUNT_INPUT";
     private static final String OUTPUT_TOPIC = "WORDCOUNT_OUTPUT";
@@ -50,7 +52,7 @@ public class DatabaseFlatMapTest {
 
     @Before
     public void prepareEnvironment() throws Exception {
-        DB = new EmbeddedDerby();
+        DB = new EmbeddedDerby("db-" + COUNTER.getAndIncrement());
         DB.createTable(INPUT_TOPIC,
                 "id", "INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1)",
                 "lines", "VARCHAR(256)");
