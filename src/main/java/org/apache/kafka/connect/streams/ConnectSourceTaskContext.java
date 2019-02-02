@@ -19,12 +19,19 @@ package org.apache.kafka.connect.streams;
 import org.apache.kafka.connect.source.SourceTaskContext;
 import org.apache.kafka.connect.storage.OffsetStorageReader;
 
+import java.util.Map;
+
 public class ConnectSourceTaskContext implements SourceTaskContext {
 
     private final OffsetStorageReader reader;
 
     public ConnectSourceTaskContext(OffsetStorageReader reader) {
         this.reader = reader;
+    }
+
+    @Override
+    public Map<String, String> configs() {
+        return null;
     }
 
     @Override

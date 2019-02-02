@@ -30,6 +30,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -101,6 +102,11 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
         return new ConsumerRecords<>(records);
     }
 
+    @Override
+    public ConsumerRecords<byte[], byte[]> poll(Duration timeout) {
+        return poll(timeout.toMillis());
+    }
+
     private void poll(Consumer<byte[], byte[]> consumer,
                       long timeout,
                       Map<TopicPartition, List<ConsumerRecord<byte[], byte[]>>> records) {
@@ -120,8 +126,19 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
     }
 
     @Override
+    public void commitSync(Duration timeout) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void commitSync(Map<TopicPartition, OffsetAndMetadata> offsets) {
         kafkaConsumer.commitSync(filterOffsets(offsets));
+        // TODO commit connect
+    }
+
+    @Override
+    public void commitSync(Map<TopicPartition, OffsetAndMetadata> offsets, Duration timeout) {
+        kafkaConsumer.commitSync(filterOffsets(offsets), timeout);
         // TODO commit connect
     }
 
@@ -163,8 +180,18 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
     }
 
     @Override
+    public long position(TopicPartition partition, Duration timeout) {
+        return connectConsumers.containsKey(partition.topic()) ? 0L : kafkaConsumer.position(partition, timeout);
+    }
+
+    @Override
     public OffsetAndMetadata committed(TopicPartition partition) {
         return connectConsumers.containsKey(partition.topic()) ? null : kafkaConsumer.committed(partition);
+    }
+
+    @Override
+    public OffsetAndMetadata committed(TopicPartition partition, Duration timeout) {
+        return connectConsumers.containsKey(partition.topic()) ? null : kafkaConsumer.committed(partition, timeout);
     }
 
     @Override
@@ -178,8 +205,18 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
     }
 
     @Override
+    public List<PartitionInfo> partitionsFor(String topic, Duration timeout) {
+        return kafkaConsumer.partitionsFor(topic, timeout);
+    }
+
+    @Override
     public Map<String, List<PartitionInfo>> listTopics() {
         return kafkaConsumer.listTopics();
+    }
+
+    @Override
+    public Map<String, List<PartitionInfo>> listTopics(Duration timeout) {
+        return kafkaConsumer.listTopics(timeout);
     }
 
     @Override
@@ -205,13 +242,29 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
     }
 
     @Override
+    public Map<TopicPartition, OffsetAndTimestamp> offsetsForTimes(Map<TopicPartition, Long> timestampsToSearch,
+                                                                   Duration timeout) {
+        return kafkaConsumer.offsetsForTimes(timestampsToSearch, timeout);
+    }
+
+    @Override
     public Map<TopicPartition, Long> beginningOffsets(Collection<TopicPartition> partitions) {
         return kafkaConsumer.beginningOffsets(filterPartitions(partitions));
     }
 
     @Override
+    public Map<TopicPartition, Long> beginningOffsets(Collection<TopicPartition> partitions, Duration timeout) {
+        return kafkaConsumer.beginningOffsets(filterPartitions(partitions), timeout);
+    }
+
+    @Override
     public Map<TopicPartition, Long> endOffsets(Collection<TopicPartition> partitions) {
         return kafkaConsumer.endOffsets(filterPartitions(partitions));
+    }
+
+    @Override
+    public Map<TopicPartition, Long> endOffsets(Collection<TopicPartition> partitions, Duration timeout) {
+        return kafkaConsumer.endOffsets(filterPartitions(partitions), timeout);
     }
 
     @Override
@@ -224,7 +277,18 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
 
     @Override
     public void close(long timeout, TimeUnit unit) {
-        close();
+        kafkaConsumer.close(timeout, unit);
+        for (ConnectSourceConsumer connectConsumer : connectConsumers.values()) {
+            connectConsumer.close();
+        }
+    }
+
+    @Override
+    public void close(Duration timeout) {
+        kafkaConsumer.close(timeout);
+        for (ConnectSourceConsumer connectConsumer : connectConsumers.values()) {
+            connectConsumer.close();
+        }
     }
 
     @Override

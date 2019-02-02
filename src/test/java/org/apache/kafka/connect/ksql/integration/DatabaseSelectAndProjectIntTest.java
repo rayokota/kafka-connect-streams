@@ -112,7 +112,7 @@ public class DatabaseSelectAndProjectIntTest {
                 Collections.singletonMap(outputTopic, sinkTaskConfig));
         testHarness = new IntegrationTestHarness();
         testHarness.start();
-        ksqlContext = KsqlContext.create(testHarness.ksqlConfig, testHarness.schemaRegistryClient, clientSupplier);
+        ksqlContext = KsqlContext.create(testHarness.ksqlConfig, testHarness.schemaRegistryClientFactory, clientSupplier);
         testHarness.createTopic(jsonTopicName);
         testHarness.createTopic(avroTopicName);
         MockAvroConverter.schemaRegistryClient = testHarness.schemaRegistryClient;

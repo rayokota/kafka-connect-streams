@@ -5,14 +5,18 @@ import io.confluent.kafka.schemaregistry.client.MockSchemaRegistryClient;
 import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 import io.confluent.ksql.GenericRow;
 import io.confluent.ksql.serde.DataSource;
-import io.confluent.ksql.serde.avro.KsqlGenericRowAvroDeserializer;
-import io.confluent.ksql.serde.avro.KsqlGenericRowAvroSerializer;
+import io.confluent.ksql.serde.KsqlTopicSerDe;
+import io.confluent.ksql.serde.avro.KsqlAvroTopicSerDe;
 import io.confluent.ksql.serde.delimited.KsqlDelimitedDeserializer;
 import io.confluent.ksql.serde.delimited.KsqlDelimitedSerializer;
+import io.confluent.ksql.serde.delimited.KsqlDelimitedTopicSerDe;
 import io.confluent.ksql.serde.json.KsqlJsonDeserializer;
 import io.confluent.ksql.serde.json.KsqlJsonSerializer;
+import io.confluent.ksql.serde.json.KsqlJsonTopicSerDe;
+import io.confluent.ksql.util.KafkaTopicClient;
 import io.confluent.ksql.util.KafkaTopicClientImpl;
 import io.confluent.ksql.util.KsqlConfig;
+import io.confluent.ksql.util.KsqlConstants;
 import io.confluent.ksql.util.KsqlException;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -31,7 +35,10 @@ import org.apache.kafka.connect.ksql.util.TestDataProvider;
 import org.apache.kafka.connect.ksql.util.TopicConsumer;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.test.TestUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -42,37 +49,56 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 
 public class IntegrationTestHarness {
 
+    private static final Logger LOG = LoggerFactory.getLogger(IntegrationTestHarness.class);
 
-    public static final long TEST_RECORD_FUTURE_TIMEOUT_MS = 5000;
-    public static final long RESULTS_POLL_MAX_TIME_MS = 60000;
-    public static final long RESULTS_EXTRA_POLL_TIME_MS = 250;
+    private static final long TEST_RECORD_FUTURE_TIMEOUT_MS = 5000;
+    static final long RESULTS_POLL_MAX_TIME_MS = 60000;
+    private static final Duration RESULTS_EXTRA_POLL_TIME_MS = Duration.ofMillis(250);
 
     public static final String CONSUMER_GROUP_ID_PREFIX = "KSQL_Integration_Test_Consumer_";
 
     public KsqlConfig ksqlConfig;
-    KafkaTopicClientImpl topicClient;
-    private AdminClient adminClient;
+    private KafkaTopicClientImpl topicClient;
 
+    Supplier<SchemaRegistryClient> schemaRegistryClientFactory;
     public SchemaRegistryClient schemaRegistryClient;
 
-    private TopicConsumer topicConsumer;
+    private final AtomicInteger consumedCount;
+    private final AtomicInteger producedCount;
+
+    private static IntegrationTestHarness THIS;
+    private AdminClient adminClient;
+
+    private final Map<String, Object> unifiedConfigs = new HashMap<>();
 
     public IntegrationTestHarness() {
         this.schemaRegistryClient = new MockSchemaRegistryClient();
+        THIS = this;
+        consumedCount = new AtomicInteger(0);
+        producedCount = new AtomicInteger(0);
+        this.schemaRegistryClientFactory = () -> this.schemaRegistryClient;
     }
 
+    public KafkaTopicClient topicClient() {
+        return topicClient;
+    }
 
     // Topic generation
-    public void createTopic(String topicName) {
-        topicClient.createTopic(topicName, 1, (short) 1, false);
+    public void createTopic(final String topicName) {
+        if(!topicClient.isTopicExists(topicName)) {
+            createTopic(topicName, 1, (short) 1);
+        }
     }
 
-    public void createTopic(String topicName, int numPartitions, short replicatonFactor) {
-        topicClient.createTopic(topicName, numPartitions, replicatonFactor, false);
+    public void createTopic(final String topicName, final int numPartitions, final short replicatonFactor) {
+        topicClient.createTopic(topicName, numPartitions, replicatonFactor);
     }
 
 
@@ -123,7 +149,8 @@ public class IntegrationTestHarness {
     private Properties properties() {
         Properties producerConfig = new Properties();
         producerConfig.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
-                ksqlConfig.get(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG));
+                ksqlConfig.getKsqlStreamConfigProps().get(
+                        ProducerConfig.BOOTSTRAP_SERVERS_CONFIG));
         producerConfig.put(ProducerConfig.ACKS_CONFIG, "all");
         producerConfig.put(ProducerConfig.RETRIES_CONFIG, 0);
         return producerConfig;
@@ -171,7 +198,8 @@ public class IntegrationTestHarness {
 
         Properties consumerConfig = new Properties();
         consumerConfig.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
-                ksqlConfig.get(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG));
+                ksqlConfig.getKsqlStreamConfigProps().get(
+                        ProducerConfig.BOOTSTRAP_SERVERS_CONFIG));
         consumerConfig.put(ConsumerConfig.GROUP_ID_CONFIG,
                 CONSUMER_GROUP_ID_PREFIX + System.currentTimeMillis());
         consumerConfig.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
@@ -216,7 +244,8 @@ public class IntegrationTestHarness {
 
         Properties consumerConfig = new Properties();
         consumerConfig.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
-                ksqlConfig.get(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG));
+                ksqlConfig.getKsqlStreamConfigProps().get(
+                        ProducerConfig.BOOTSTRAP_SERVERS_CONFIG));
         consumerConfig.put(ConsumerConfig.GROUP_ID_CONFIG,
                 CONSUMER_GROUP_ID_PREFIX + System.currentTimeMillis());
         consumerConfig.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
@@ -257,7 +286,7 @@ public class IntegrationTestHarness {
 
 
     public void start() throws Exception {
-        embeddedKafkaCluster = new EmbeddedSingleNodeKafkaCluster();
+        embeddedKafkaCluster = EmbeddedSingleNodeKafkaCluster.build();
         embeddedKafkaCluster.start();
         Map<String, Object> configMap = new HashMap<>();
 
@@ -275,7 +304,7 @@ public class IntegrationTestHarness {
     }
 
     public void stop() {
-        this.topicClient.close();
+        //this.topicClient.close();
         this.adminClient.close();
         this.embeddedKafkaCluster.stop();
     }
@@ -303,14 +332,15 @@ public class IntegrationTestHarness {
 
     }
 
-    private Serializer getSerializer(Schema schema, DataSource.DataSourceSerDe dataSourceSerDe) {
+    private Serializer getSerializer(final Schema schema, final DataSource.DataSourceSerDe dataSourceSerDe) {
         switch (dataSourceSerDe) {
             case JSON:
                 return new KsqlJsonSerializer(schema);
             case AVRO:
-                return new KsqlGenericRowAvroSerializer(schema,
-                        this.schemaRegistryClient,
-                        new KsqlConfig(Collections.emptyMap()));
+                return new KsqlAvroTopicSerDe().getGenericRowSerde(
+                        schema, new KsqlConfig(Collections.emptyMap()), false,
+                        () -> this.schemaRegistryClient
+                ).serializer();
             case DELIMITED:
                 return new KsqlDelimitedSerializer(schema);
             default:
@@ -318,15 +348,16 @@ public class IntegrationTestHarness {
         }
     }
 
-    private Deserializer<GenericRow> getDeserializer(Schema schema,
-                                                     DataSource.DataSourceSerDe dataSourceSerDe) {
+    private Deserializer<GenericRow> getDeserializer(final Schema schema,
+                                                     final DataSource.DataSourceSerDe dataSourceSerDe) {
         switch (dataSourceSerDe) {
             case JSON:
-                return new KsqlJsonDeserializer(schema);
+                return new KsqlJsonDeserializer(schema, false);
             case AVRO:
-                return new KsqlGenericRowAvroDeserializer(schema,
-                        this.schemaRegistryClient,
-                        false);
+                return new KsqlAvroTopicSerDe().getGenericRowSerde(
+                        schema, new KsqlConfig(Collections.emptyMap()), false,
+                        () -> this.schemaRegistryClient
+                ).deserializer();
             case DELIMITED:
                 return new KsqlDelimitedDeserializer(schema);
             default:

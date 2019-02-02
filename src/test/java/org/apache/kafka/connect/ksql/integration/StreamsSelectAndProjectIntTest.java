@@ -24,7 +24,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 
 
 @Category({IntegrationTest.class})
-public class KafkaSelectAndProjectIntTest {
+public class StreamsSelectAndProjectIntTest {
 
     private IntegrationTestHarness testHarness;
     private KsqlContext ksqlContext;
@@ -40,7 +40,7 @@ public class KafkaSelectAndProjectIntTest {
     public void before() throws Exception {
         testHarness = new IntegrationTestHarness();
         testHarness.start();
-        ksqlContext = KsqlContext.create(testHarness.ksqlConfig, testHarness.schemaRegistryClient);
+        ksqlContext = KsqlContext.create(testHarness.ksqlConfig, testHarness.schemaRegistryClientFactory);
         testHarness.createTopic(jsonTopicName);
         testHarness.createTopic(avroTopicName);
 

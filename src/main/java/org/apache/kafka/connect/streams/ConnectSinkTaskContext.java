@@ -34,6 +34,11 @@ public class ConnectSinkTaskContext implements SinkTaskContext {
     }
 
     @Override
+    public Map<String, String> configs() {
+        return null;
+    }
+
+    @Override
     public void offset(Map<TopicPartition, Long> offsets) {
         this.offsets.putAll(offsets);
     }

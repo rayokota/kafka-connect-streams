@@ -20,14 +20,14 @@ import org.apache.kafka.clients.consumer.internals.PartitionAssignor;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.Configurable;
 import org.apache.kafka.streams.errors.TaskAssignmentException;
-import org.apache.kafka.streams.processor.internals.StreamPartitionAssignor;
+import org.apache.kafka.streams.processor.internals.StreamsPartitionAssignor;
 
 import java.util.Map;
 import java.util.Set;
 
 public class WrappedPartitionAssignor implements PartitionAssignor, Configurable {
 
-    private StreamPartitionAssignor assignor = new StreamPartitionAssignor();
+    private StreamsPartitionAssignor assignor = new StreamsPartitionAssignor();
 
     @Override
     public void configure(final Map<String, ?> configs) {
