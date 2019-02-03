@@ -9,3 +9,4 @@ target
 *.swp
 .DS_Store
 dependency-reduced-pom.xml
+__test_database_db-*
