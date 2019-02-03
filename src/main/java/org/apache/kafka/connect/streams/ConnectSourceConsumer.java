@@ -37,6 +37,7 @@ import org.apache.kafka.connect.header.Header;
 import org.apache.kafka.connect.header.Headers;
 import org.apache.kafka.connect.runtime.TaskConfig;
 import org.apache.kafka.connect.runtime.TransformationChain;
+import org.apache.kafka.connect.runtime.errors.RetryWithToleranceOperator;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.source.SourceTask;
 import org.apache.kafka.connect.storage.Converter;
@@ -49,6 +50,7 @@ import org.apache.kafka.connect.util.ConnectUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -65,10 +67,18 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
+import static org.apache.kafka.common.utils.Time.SYSTEM;
+import static org.apache.kafka.connect.runtime.ConnectorConfig.ERRORS_RETRY_MAX_DELAY_DEFAULT;
+import static org.apache.kafka.connect.runtime.ConnectorConfig.ERRORS_RETRY_TIMEOUT_DEFAULT;
+import static org.apache.kafka.connect.runtime.errors.ToleranceType.NONE;
+
 public class ConnectSourceConsumer implements Consumer<byte[], byte[]> {
     private static final Logger log = LoggerFactory.getLogger(ConnectSourceConsumer.class);
 
     private static final AtomicInteger NEXT_ID = new AtomicInteger();
+    private static final RetryWithToleranceOperator NOOP_OPERATOR = new RetryWithToleranceOperator(
+            ERRORS_RETRY_TIMEOUT_DEFAULT, ERRORS_RETRY_MAX_DELAY_DEFAULT, NONE, SYSTEM);
+
 
     private final ConsumerConfig config;
     private final SourceTask task;
@@ -88,6 +98,8 @@ public class ConnectSourceConsumer implements Consumer<byte[], byte[]> {
 
     private int capacity;  // maximum number of records to buffer
     private ReaderTask readerTask;
+
+    private boolean firstPoll = true;
 
     public static ConnectSourceConsumer create(String connectorName, ConnectStreamsConfig connectStreamsConfig,
                                                TaskConfig taskConfig, ConsumerConfig consumerConfig) {
@@ -120,7 +132,7 @@ public class ConnectSourceConsumer implements Consumer<byte[], byte[]> {
                 keyConverter,
                 valueConverter,
                 headerConverter,
-                new TransformationChain<>(Collections.emptyList()),
+                new TransformationChain<>(Collections.emptyList(), NOOP_OPERATOR),
                 offsetReader,
                 offsetWriter,
                 null,
@@ -221,6 +233,10 @@ public class ConnectSourceConsumer implements Consumer<byte[], byte[]> {
 
     @Override
     public ConsumerRecords<byte[], byte[]> poll(long timeout) {
+        if (firstPoll) {
+            firstPoll = false;
+            return ConsumerRecords.empty();
+        }
         try {
             List<SourceRecord> records = readerTask.getNextRecords(timeout);
             System.out.println("*** ConnectSourceConsumer: poll " + (records != null ? records.size() : "null"));
@@ -229,6 +245,11 @@ public class ConnectSourceConsumer implements Consumer<byte[], byte[]> {
             Thread.interrupted();
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    public ConsumerRecords<byte[], byte[]> poll(final Duration timeout) {
+        return poll(timeout.toMillis());
     }
 
     private ConsumerRecords<byte[], byte[]> convertRecords(List<SourceRecord> records)
@@ -295,7 +316,15 @@ public class ConnectSourceConsumer implements Consumer<byte[], byte[]> {
     }
 
     @Override
+    public void commitSync(Duration timeout) {
+    }
+
+    @Override
     public void commitSync(Map<TopicPartition, OffsetAndMetadata> offsets) {
+    }
+
+    @Override
+    public void commitSync(Map<TopicPartition, OffsetAndMetadata> offsets, Duration timeout) {
     }
 
     @Override
@@ -328,7 +357,17 @@ public class ConnectSourceConsumer implements Consumer<byte[], byte[]> {
     }
 
     @Override
+    public long position(TopicPartition partition, Duration timeout) {
+        return 0L;
+    }
+
+    @Override
     public OffsetAndMetadata committed(TopicPartition partition) {
+        return null;
+    }
+
+    @Override
+    public OffsetAndMetadata committed(TopicPartition partition, Duration timeout) {
         return null;
     }
 
@@ -343,7 +382,17 @@ public class ConnectSourceConsumer implements Consumer<byte[], byte[]> {
     }
 
     @Override
+    public List<PartitionInfo> partitionsFor(String topic, Duration timeout) {
+        return null;
+    }
+
+    @Override
     public Map<String, List<PartitionInfo>> listTopics() {
+        return null;
+    }
+
+    @Override
+    public Map<String, List<PartitionInfo>> listTopics(Duration timeout) {
         return null;
     }
 
@@ -366,12 +415,28 @@ public class ConnectSourceConsumer implements Consumer<byte[], byte[]> {
     }
 
     @Override
+    public Map<TopicPartition, OffsetAndTimestamp> offsetsForTimes(Map<TopicPartition, Long> timestampsToSearch,
+                                                                   Duration timeout) {
+        return null;
+    }
+
+    @Override
     public Map<TopicPartition, Long> beginningOffsets(Collection<TopicPartition> partitions) {
         return null;
     }
 
     @Override
+    public Map<TopicPartition, Long> beginningOffsets(Collection<TopicPartition> partitions, Duration timeout) {
+        return null;
+    }
+
+    @Override
     public Map<TopicPartition, Long> endOffsets(Collection<TopicPartition> partitions) {
+        return null;
+    }
+
+    @Override
+    public Map<TopicPartition, Long> endOffsets(Collection<TopicPartition> partitions, Duration timeout) {
         return null;
     }
 
@@ -383,6 +448,11 @@ public class ConnectSourceConsumer implements Consumer<byte[], byte[]> {
 
     @Override
     public void close(long timeout, TimeUnit unit) {
+        close();
+    }
+
+    @Override
+    public void close(Duration timeout) {
         close();
     }
 

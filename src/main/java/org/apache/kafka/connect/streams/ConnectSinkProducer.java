@@ -37,6 +37,7 @@ import org.apache.kafka.connect.header.ConnectHeaders;
 import org.apache.kafka.connect.header.Headers;
 import org.apache.kafka.connect.runtime.TaskConfig;
 import org.apache.kafka.connect.runtime.TransformationChain;
+import org.apache.kafka.connect.runtime.errors.RetryWithToleranceOperator;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 import org.apache.kafka.connect.storage.Converter;
@@ -53,8 +54,16 @@ import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import static org.apache.kafka.common.utils.Time.SYSTEM;
+import static org.apache.kafka.connect.runtime.ConnectorConfig.ERRORS_RETRY_MAX_DELAY_DEFAULT;
+import static org.apache.kafka.connect.runtime.ConnectorConfig.ERRORS_RETRY_TIMEOUT_DEFAULT;
+import static org.apache.kafka.connect.runtime.errors.ToleranceType.NONE;
+
 public class ConnectSinkProducer implements Producer<byte[], byte[]> {
     private static final Logger log = LoggerFactory.getLogger(ConnectSinkProducer.class);
+
+    private static final RetryWithToleranceOperator NOOP_OPERATOR = new RetryWithToleranceOperator(
+            ERRORS_RETRY_TIMEOUT_DEFAULT, ERRORS_RETRY_MAX_DELAY_DEFAULT, NONE, SYSTEM);
 
     private final ProducerConfig config;
     private final SinkTask task;
@@ -92,7 +101,7 @@ public class ConnectSinkProducer implements Producer<byte[], byte[]> {
                 keyConverter,
                 valueConverter,
                 headerConverter,
-                new TransformationChain<>(Collections.emptyList()),
+                new TransformationChain<>(Collections.emptyList(), NOOP_OPERATOR),
                 null,
                 new SystemTime());
         producer.initialize(taskConfig);

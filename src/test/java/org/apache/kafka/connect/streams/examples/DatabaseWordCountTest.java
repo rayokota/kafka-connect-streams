@@ -37,7 +37,6 @@ public class DatabaseWordCountTest {
     @ClassRule
     public static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(1);
     public static EmbeddedDerby DB;
-    public static AtomicInteger COUNTER = new AtomicInteger();
 
     private static final String INPUT_TOPIC = "WORDCOUNT_INPUT";
     private static final String OUTPUT_TOPIC = "WORDCOUNT_OUTPUT";
@@ -55,7 +54,7 @@ public class DatabaseWordCountTest {
 
     @Before
     public void prepareEnvironment() throws Exception {
-        DB = new EmbeddedDerby("db-" + COUNTER.getAndIncrement());
+        DB = new EmbeddedDerby("db-" + System.currentTimeMillis());
         DB.createTable(INPUT_TOPIC,
                 "id", "INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1)",
                 "lines", "VARCHAR(256)");

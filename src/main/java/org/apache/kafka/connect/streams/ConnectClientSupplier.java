@@ -86,4 +86,9 @@ public class ConnectClientSupplier implements KafkaClientSupplier {
     public Consumer<byte[], byte[]> getRestoreConsumer(final Map<String, Object> config) {
         return defaultSupplier.getRestoreConsumer(config);
     }
+
+    @Override
+    public Consumer<byte[], byte[]> getGlobalConsumer(final Map<String, Object> config) {
+        return defaultSupplier.getGlobalConsumer(config);
+    }
 }

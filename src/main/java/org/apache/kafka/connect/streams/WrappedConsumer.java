@@ -27,9 +27,11 @@ import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.connect.streams.internals.WrappedRebalanceListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -69,6 +71,9 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
     @Override
     public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
         kafkaConsumer.subscribe(topics, callback);
+        for (ConnectSourceConsumer connectConsumer : connectConsumers.values()) {
+            connectConsumer.subscribe(topics, callback);
+        }
     }
 
     @Override
@@ -79,6 +84,9 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
     @Override
     public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
         kafkaConsumer.subscribe(pattern, callback);
+        for (ConnectSourceConsumer connectConsumer : connectConsumers.values()) {
+            connectConsumer.subscribe(pattern, callback);
+        }
     }
 
     @Override
@@ -95,10 +103,20 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
     public ConsumerRecords<byte[], byte[]> poll(long timeout) {
         Map<TopicPartition, List<ConsumerRecord<byte[], byte[]>>> records = new HashMap<>();
         poll(kafkaConsumer, timeout, records);
+        try {
+            Thread.sleep(50);
+        } catch (InterruptedException e) {
+
+        }
         for (ConnectSourceConsumer connectConsumer : connectConsumers.values()) {
             poll(connectConsumer, timeout, records);
         }
         return new ConsumerRecords<>(records);
+    }
+
+    @Override
+    public ConsumerRecords<byte[], byte[]> poll(Duration timeout) {
+        return poll(timeout.toMillis());
     }
 
     private void poll(Consumer<byte[], byte[]> consumer,
@@ -120,8 +138,19 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
     }
 
     @Override
+    public void commitSync(Duration timeout) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void commitSync(Map<TopicPartition, OffsetAndMetadata> offsets) {
         kafkaConsumer.commitSync(filterOffsets(offsets));
+        // TODO commit connect
+    }
+
+    @Override
+    public void commitSync(Map<TopicPartition, OffsetAndMetadata> offsets, Duration timeout) {
+        kafkaConsumer.commitSync(filterOffsets(offsets), timeout);
         // TODO commit connect
     }
 
@@ -163,8 +192,18 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
     }
 
     @Override
+    public long position(TopicPartition partition, Duration timeout) {
+        return connectConsumers.containsKey(partition.topic()) ? 0L : kafkaConsumer.position(partition, timeout);
+    }
+
+    @Override
     public OffsetAndMetadata committed(TopicPartition partition) {
         return connectConsumers.containsKey(partition.topic()) ? null : kafkaConsumer.committed(partition);
+    }
+
+    @Override
+    public OffsetAndMetadata committed(TopicPartition partition, Duration timeout) {
+        return connectConsumers.containsKey(partition.topic()) ? null : kafkaConsumer.committed(partition, timeout);
     }
 
     @Override
@@ -178,8 +217,18 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
     }
 
     @Override
+    public List<PartitionInfo> partitionsFor(String topic, Duration timeout) {
+        return kafkaConsumer.partitionsFor(topic, timeout);
+    }
+
+    @Override
     public Map<String, List<PartitionInfo>> listTopics() {
         return kafkaConsumer.listTopics();
+    }
+
+    @Override
+    public Map<String, List<PartitionInfo>> listTopics(Duration timeout) {
+        return kafkaConsumer.listTopics(timeout);
     }
 
     @Override
@@ -191,12 +240,26 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
     public void pause(Collection<TopicPartition> partitions) {
         // TODO support?
         //kafkaConsumer.pause(filterPartitions(partitions));
+
+        Set<String> topics = partitions.stream().map(TopicPartition::topic).collect(Collectors.toSet());
+        for (Map.Entry<String, ConnectSourceConsumer> entry : connectConsumers.entrySet()) {
+            if (topics.contains(entry.getKey())) {
+                entry.getValue().pause(partitions);
+            }
+        }
     }
 
     @Override
     public void resume(Collection<TopicPartition> partitions) {
         // TODO support?
         //kafkaConsumer.resume(filterPartitions(partitions));
+
+        Set<String> topics = partitions.stream().map(TopicPartition::topic).collect(Collectors.toSet());
+        for (Map.Entry<String, ConnectSourceConsumer> entry : connectConsumers.entrySet()) {
+            if (topics.contains(entry.getKey())) {
+                entry.getValue().resume(partitions);
+            }
+        }
     }
 
     @Override
@@ -205,13 +268,29 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
     }
 
     @Override
+    public Map<TopicPartition, OffsetAndTimestamp> offsetsForTimes(Map<TopicPartition, Long> timestampsToSearch,
+                                                                   Duration timeout) {
+        return kafkaConsumer.offsetsForTimes(timestampsToSearch, timeout);
+    }
+
+    @Override
     public Map<TopicPartition, Long> beginningOffsets(Collection<TopicPartition> partitions) {
         return kafkaConsumer.beginningOffsets(filterPartitions(partitions));
     }
 
     @Override
+    public Map<TopicPartition, Long> beginningOffsets(Collection<TopicPartition> partitions, Duration timeout) {
+        return kafkaConsumer.beginningOffsets(filterPartitions(partitions), timeout);
+    }
+
+    @Override
     public Map<TopicPartition, Long> endOffsets(Collection<TopicPartition> partitions) {
         return kafkaConsumer.endOffsets(filterPartitions(partitions));
+    }
+
+    @Override
+    public Map<TopicPartition, Long> endOffsets(Collection<TopicPartition> partitions, Duration timeout) {
+        return kafkaConsumer.endOffsets(filterPartitions(partitions), timeout);
     }
 
     @Override
@@ -224,7 +303,18 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
 
     @Override
     public void close(long timeout, TimeUnit unit) {
-        close();
+        kafkaConsumer.close(timeout, unit);
+        for (ConnectSourceConsumer connectConsumer : connectConsumers.values()) {
+            connectConsumer.close();
+        }
+    }
+
+    @Override
+    public void close(Duration timeout) {
+        kafkaConsumer.close(timeout);
+        for (ConnectSourceConsumer connectConsumer : connectConsumers.values()) {
+            connectConsumer.close();
+        }
     }
 
     @Override

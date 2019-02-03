@@ -11,6 +11,7 @@ import org.apache.kafka.connect.ksql.util.OrderDataProvider;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -23,8 +24,9 @@ import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.MatcherAssert.assertThat;
 
 
+@Ignore
 @Category({IntegrationTest.class})
-public class KafkaSelectAndProjectIntTest {
+public class StreamsSelectAndProjectIntTest {
 
     private IntegrationTestHarness testHarness;
     private KsqlContext ksqlContext;
@@ -40,7 +42,7 @@ public class KafkaSelectAndProjectIntTest {
     public void before() throws Exception {
         testHarness = new IntegrationTestHarness();
         testHarness.start();
-        ksqlContext = KsqlContext.create(testHarness.ksqlConfig, testHarness.schemaRegistryClient);
+        ksqlContext = KsqlContext.create(testHarness.ksqlConfig, testHarness.schemaRegistryClientFactory);
         testHarness.createTopic(jsonTopicName);
         testHarness.createTopic(avroTopicName);
 

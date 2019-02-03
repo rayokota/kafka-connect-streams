@@ -81,7 +81,6 @@ public abstract class AbstractDatabaseJoinIntegrationTest {
     @ClassRule
     public static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(1);
     public static EmbeddedDerby DB;
-    public static AtomicInteger COUNTER = new AtomicInteger();
 
     @Rule
     public final TemporaryFolder testFolder = new TemporaryFolder(TestUtils.tempDirectory());
@@ -174,7 +173,7 @@ public abstract class AbstractDatabaseJoinIntegrationTest {
 
         STREAMS_CONFIG.put(StreamsConfig.STATE_DIR_CONFIG, testFolder.getRoot().getPath());
 
-        DB = new EmbeddedDerby("db-" + COUNTER.getAndIncrement());
+        DB = new EmbeddedDerby("db-" + System.currentTimeMillis());
         DB.createTable(INPUT_TOPIC_LEFT,
                 "id", "BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1)",
                 "value", "VARCHAR(256)");
