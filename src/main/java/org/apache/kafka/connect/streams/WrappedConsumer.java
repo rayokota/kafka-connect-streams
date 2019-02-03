@@ -27,6 +27,7 @@ import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.connect.streams.internals.WrappedRebalanceListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,6 +71,9 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
     @Override
     public void subscribe(Collection<String> topics, ConsumerRebalanceListener callback) {
         kafkaConsumer.subscribe(topics, callback);
+        for (ConnectSourceConsumer connectConsumer : connectConsumers.values()) {
+            connectConsumer.subscribe(topics, callback);
+        }
     }
 
     @Override
@@ -80,6 +84,9 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
     @Override
     public void subscribe(Pattern pattern, ConsumerRebalanceListener callback) {
         kafkaConsumer.subscribe(pattern, callback);
+        for (ConnectSourceConsumer connectConsumer : connectConsumers.values()) {
+            connectConsumer.subscribe(pattern, callback);
+        }
     }
 
     @Override
@@ -96,6 +103,11 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
     public ConsumerRecords<byte[], byte[]> poll(long timeout) {
         Map<TopicPartition, List<ConsumerRecord<byte[], byte[]>>> records = new HashMap<>();
         poll(kafkaConsumer, timeout, records);
+        try {
+            Thread.sleep(50);
+        } catch (InterruptedException e) {
+
+        }
         for (ConnectSourceConsumer connectConsumer : connectConsumers.values()) {
             poll(connectConsumer, timeout, records);
         }
@@ -228,12 +240,26 @@ public class WrappedConsumer implements Consumer<byte[], byte[]> {
     public void pause(Collection<TopicPartition> partitions) {
         // TODO support?
         //kafkaConsumer.pause(filterPartitions(partitions));
+
+        Set<String> topics = partitions.stream().map(TopicPartition::topic).collect(Collectors.toSet());
+        for (Map.Entry<String, ConnectSourceConsumer> entry : connectConsumers.entrySet()) {
+            if (topics.contains(entry.getKey())) {
+                entry.getValue().pause(partitions);
+            }
+        }
     }
 
     @Override
     public void resume(Collection<TopicPartition> partitions) {
         // TODO support?
         //kafkaConsumer.resume(filterPartitions(partitions));
+
+        Set<String> topics = partitions.stream().map(TopicPartition::topic).collect(Collectors.toSet());
+        for (Map.Entry<String, ConnectSourceConsumer> entry : connectConsumers.entrySet()) {
+            if (topics.contains(entry.getKey())) {
+                entry.getValue().resume(partitions);
+            }
+        }
     }
 
     @Override

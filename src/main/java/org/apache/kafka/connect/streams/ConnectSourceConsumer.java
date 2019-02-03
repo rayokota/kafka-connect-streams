@@ -99,6 +99,8 @@ public class ConnectSourceConsumer implements Consumer<byte[], byte[]> {
     private int capacity;  // maximum number of records to buffer
     private ReaderTask readerTask;
 
+    private boolean firstPoll = true;
+
     public static ConnectSourceConsumer create(String connectorName, ConnectStreamsConfig connectStreamsConfig,
                                                TaskConfig taskConfig, ConsumerConfig consumerConfig) {
         Converter keyConverter = Utils.newConverter(connectStreamsConfig, ConnectStreamsConfig.KEY_CONVERTER_CLASS_CONFIG);
@@ -231,6 +233,10 @@ public class ConnectSourceConsumer implements Consumer<byte[], byte[]> {
 
     @Override
     public ConsumerRecords<byte[], byte[]> poll(long timeout) {
+        if (firstPoll) {
+            firstPoll = false;
+            return ConsumerRecords.empty();
+        }
         try {
             List<SourceRecord> records = readerTask.getNextRecords(timeout);
             System.out.println("*** ConnectSourceConsumer: poll " + (records != null ? records.size() : "null"));

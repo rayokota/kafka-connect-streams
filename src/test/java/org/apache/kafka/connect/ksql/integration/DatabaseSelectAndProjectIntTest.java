@@ -39,11 +39,11 @@ import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.MatcherAssert.assertThat;
 
 
+@Ignore
 @Category({IntegrationTest.class})
 public class DatabaseSelectAndProjectIntTest {
 
     public static EmbeddedDerby DB;
-    public static AtomicInteger COUNTER = new AtomicInteger();
 
     private static final String OUTPUT_TOPIC = "";
 
@@ -57,7 +57,7 @@ public class DatabaseSelectAndProjectIntTest {
 
     @Before
     public void before() throws Exception {
-        DB = new EmbeddedDerby("db-" + COUNTER.getAndIncrement());
+        DB = new EmbeddedDerby("db-" + System.currentTimeMillis());
     }
 
     private void setup(String inputTopic) throws Exception {

@@ -11,6 +11,7 @@ import org.apache.kafka.connect.ksql.util.OrderDataProvider;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -23,6 +24,7 @@ import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.MatcherAssert.assertThat;
 
 
+@Ignore
 @Category({IntegrationTest.class})
 public class StreamsSelectAndProjectIntTest {
 
